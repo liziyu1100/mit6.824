@@ -22,10 +22,13 @@ import "log"
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: mrworker xxx.so\n")
-		os.Exit(1)
+		//os.Exit(1)
 	}
 
-	mapf, reducef := loadPlugin(os.Args[1])
+	//mapf, reducef := loadPlugin(os.Args[1])
+
+	var mapf func(string, string) []mr.KeyValue
+	var reducef func(string, []string) string
 
 	mr.Worker(mapf, reducef)
 }

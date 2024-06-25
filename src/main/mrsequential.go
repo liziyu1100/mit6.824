@@ -1,18 +1,28 @@
 package main
 
+import (
+	"6.5840/mr"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"plugin"
+	"sort"
+)
+
 //
 // simple sequential MapReduce.
 //
 // go run mrsequential.go wc.so pg*.txt
 //
 
-import "fmt"
-import "6.5840/mr"
-import "plugin"
-import "os"
-import "log"
-import "io/ioutil"
-import "sort"
+/*你的任务是实现一个分布式的MapReduce，由协调者和工作进程两个程序组成。
+将只有一个协调者进程和一个或多个并行执行的工作进程。
+在真实的系统中，工作进程将在许多不同的机器上运行，但是在本实验中，将它们全部运行在一台机器上。
+工作进程将通过RPC与协调者进行通信。
+每个工作进程将循环向协调者请求任务，从一个或多个文件中读取任务的输入，执行任务，将任务的输出写入一个或多个文件，然后再次向协调者请求新的任务。
+协调者应该在合理的时间内（本实验中为十秒）注意到一个工作进程没有完成其任务，并将相同的任务分配给另一个工作进程。
+*/
 
 // for sorting by key.
 type ByKey []mr.KeyValue
@@ -64,7 +74,7 @@ func main() {
 	//
 	// call Reduce on each distinct key in intermediate[],
 	// and print the result to mr-out-0.
-	//
+	// 将相同key划分在一块
 	i := 0
 	for i < len(intermediate) {
 		j := i + 1
