@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 //
@@ -13,11 +10,30 @@ package main
 // Please do not change this file.
 //
 
-import "6.5840/mr"
+import (
+	"6.5840/mr"
+	"strings"
+	"unicode"
+)
 import "plugin"
 import "os"
 import "fmt"
 import "log"
+
+func Map(filename string, contents string) []mr.KeyValue {
+	// function to detect word separators.
+	ff := func(r rune) bool { return !unicode.IsLetter(r) }
+
+	// split contents into an array of words.
+	words := strings.FieldsFunc(contents, ff)
+
+	kva := []mr.KeyValue{}
+	for _, w := range words {
+		kv := mr.KeyValue{w, "1"}
+		kva = append(kva, kv)
+	}
+	return kva
+}
 
 func main() {
 	if len(os.Args) != 2 {
@@ -29,7 +45,7 @@ func main() {
 
 	var mapf func(string, string) []mr.KeyValue
 	var reducef func(string, []string) string
-
+	mapf = Map
 	mr.Worker(mapf, reducef)
 }
 

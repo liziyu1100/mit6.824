@@ -25,9 +25,18 @@ type ExampleReply struct {
 // Add your RPC definitions here.
 type TaskArgs struct {
 }
+type FinishArgs struct {
+	FinishID int // 0 map 1 reduce
+	TaskID   int
+}
+type WokerInitReply struct {
+	WorkerNumber int //worker编号
+	NReduce      int //reduce任务数量
+}
 type TaskReply struct {
-	TaskFiles []string
-	NReduce   int
+	FileName string
+	Status   int //0 task map 1 wait other map 2 task reduce 3 wait other reduce
+	TaskID   int
 }
 
 // Cook up a unique-ish UNIX-domain socket name
