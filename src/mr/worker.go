@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
+	"sort"
 	"time"
 )
 import "log"
@@ -16,6 +18,12 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -46,7 +54,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	var fmapts []string //已完成的map任务名称
 	// Your worker implementation here.
 
-	// worker循环请求master 获取map任务
+	// worker循环请求master 获取任务
 	for {
 		reply := callTask()
 		if reply.Status == 0 {
@@ -59,12 +67,44 @@ func Worker(mapf func(string, string) []KeyValue,
 			fmapts = append(fmapts, reply.FileName)
 		} else if reply.Status == 1 {
 			// 方法一: worker sleep
-			time.Sleep(5 * time.Second)
+			time.Sleep(1 * time.Second)
 		} else if reply.Status == 2 {
 			fmt.Printf(fmt.Sprintf("worker:%d 执行reduce任务:%d \n", workerID, reply.TaskID))
+			kva, err := findFilesWithSuffixY("./", reply.FileName)
+			if err != nil {
+				log.Fatalf("读取reduce任务失败:" + err.Error())
+			}
+			//shuffle
+			sort.Sort(ByKey(*kva))
+			oname := "mr-out-" + reply.FileName
+			ofile, _ := os.Create(oname)
+			i := 0
+			for i < len(*kva) {
+				j := i + 1
+				for j < len(*kva) && (*kva)[j].Key == (*kva)[i].Key {
+					j++
+				}
+				values := []string{}
+				for k := i; k < j; k++ {
+					values = append(values, (*kva)[k].Value)
+				}
+				//reduce
+				output := reducef((*kva)[i].Key, values)
+
+				// this is the correct format for each line of Reduce output.
+				fmt.Fprintf(ofile, "%v %v\n", (*kva)[i].Key, output)
+				i = j
+			}
+			ofile.Close()
+			callFinishMap(1, reply.TaskID)
+		} else if reply.Status == 3 {
+			// 方法一: worker sleep
+			time.Sleep(1 * time.Second)
+		} else {
 			break
 		}
 	}
+	fmt.Printf("job执行完成\n")
 
 }
 
@@ -124,7 +164,6 @@ func callTask() TaskReply {
 	//for _, task := range reply.TaskFiles {
 	//	tasks += task
 	//}
-	fmt.Println("callTask reply: ", reply)
 	return reply
 	//out := fmt.Sprintf("%s nreduce=%d", tasks, reply.NReduce)
 	//fmt.Println(out)
@@ -133,13 +172,13 @@ func callFinishMap(FinishID int, taskID int) {
 	args := FinishArgs{FinishID: FinishID, TaskID: taskID}
 	reply := TaskReply{}
 	call("Coordinator.FinishMap", &args, &reply)
-	fmt.Println("call finishMap reply ")
+	fmt.Println(fmt.Sprintf("worker: %d 完成任务种类: %d(0 map 1 reduce) 任务ID：%d", workerID, FinishID, taskID))
 }
 func callworkerInit() WokerInitReply {
 	args := TaskArgs{}
 	reply := WokerInitReply{}
 	call("Coordinator.InitWorker", &args, &reply)
-	fmt.Println("call worker init reply ")
+	fmt.Println(fmt.Sprintf("worker:%d 初始化完毕", workerID))
 	return reply
 }
 
@@ -169,4 +208,37 @@ func writeIntermed(midout *[]KeyValue, nReduce int, taskId int) error {
 		}
 	}
 	return nil
+}
+
+// findFilesWithSuffixY 查找目录下所有以 mr-xy 命名并且 y 等于 a 的文件，并返回文件内容
+func findFilesWithSuffixY(dirPath string, a string) (*[]KeyValue, error) {
+	// 定义文件名模式的正则表达式
+	pattern := regexp.MustCompile(`^mr-\d+` + a + `$`)
+
+	// 遍历目录，查找匹配的文件
+	files, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+	var kva []KeyValue
+	for _, file := range files {
+		if !file.IsDir() && pattern.MatchString(file.Name()) {
+			// 打印匹配的文件名
+			fmt.Printf("Found file: %s\n", file.Name())
+			midfile, err := os.Open(fmt.Sprintf("%s/%s", dirPath, file.Name()))
+			if err != nil {
+				return nil, fmt.Errorf("failed to open file: %w", err)
+			}
+			dec := json.NewDecoder(midfile)
+			for {
+				var kv KeyValue
+				if err := dec.Decode(&kv); err != nil {
+					break
+				}
+				kva = append(kva, kv)
+			}
+		}
+	}
+
+	return &kva, nil
 }

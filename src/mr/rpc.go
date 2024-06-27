@@ -35,7 +35,7 @@ type WokerInitReply struct {
 }
 type TaskReply struct {
 	FileName string
-	Status   int //0 task map 1 wait other map 2 task reduce 3 wait other reduce
+	Status   int //0 task map 1 wait other map 2 task reduce 3 wait other reduce 4 finish Job
 	TaskID   int
 }
 

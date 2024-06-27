@@ -12,6 +12,7 @@ package main
 
 import (
 	"6.5840/mr"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -34,6 +35,10 @@ func Map(filename string, contents string) []mr.KeyValue {
 	}
 	return kva
 }
+func Reduce(key string, values []string) string {
+	// return the number of occurrences of this word.
+	return strconv.Itoa(len(values))
+}
 
 func main() {
 	if len(os.Args) != 2 {
@@ -46,6 +51,7 @@ func main() {
 	var mapf func(string, string) []mr.KeyValue
 	var reducef func(string, []string) string
 	mapf = Map
+	reducef = Reduce
 	mr.Worker(mapf, reducef)
 }
 

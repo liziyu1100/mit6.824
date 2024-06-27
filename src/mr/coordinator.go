@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 )
@@ -65,6 +66,9 @@ func (c *Coordinator) Done() bool {
 
 	// Your code here.
 	ret = finishedReduceSign
+	if ret {
+		fmt.Println("当前job完成，master退出")
+	}
 	return ret
 }
 
@@ -87,8 +91,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	taskN = 0
 	for ; taskN < nReduces; taskN++ { // 初始化reduce任务
 		temp := Task{id: taskN, isFinish: false, taskName: strconv.Itoa(taskN), isAlloc: false, taskType: 1}
-		tasksMap = append(tasksMap, temp)
-		taskN++
+		tasksReduce = append(tasksReduce, temp)
 	}
 	c.server()
 	return &c
@@ -119,20 +122,24 @@ func (c *Coordinator) SendTask(args *TaskArgs, reply *TaskReply) error {
 			reply.Status = 1
 		}
 	} else {
-		//job的reduce任务尚未完成
-		if allocReduce < len(tasksReduce) {
-			for index, task := range tasksReduce {
-				if !task.isAlloc {
-					reply.FileName = task.taskName
-					reply.Status = 2
-					reply.TaskID = task.id
-					tasksReduce[index].isAlloc = true
-					allocReduce++
-					break
-				}
-			}
+		if finishedReduceSign {
+			reply.Status = 4
 		} else {
-			reply.Status = 3
+			//job的reduce任务尚未完成
+			if allocReduce < len(tasksReduce) {
+				for index, task := range tasksReduce {
+					if !task.isAlloc {
+						reply.FileName = task.taskName
+						reply.Status = 2
+						reply.TaskID = task.id
+						tasksReduce[index].isAlloc = true
+						allocReduce++
+						break
+					}
+				}
+			} else {
+				reply.Status = 3
+			}
 		}
 
 	}
@@ -151,10 +158,12 @@ func (c *Coordinator) FinishMap(args *FinishArgs, reply *TaskReply) error {
 		if finishedTask == len(tasksMap) {
 			finishedMapSign = true
 			finishedTask = 0
+			fmt.Printf("所有map执行完成，开始执行reduce任务\n")
 		}
 	} else {
 		if finishedTask == len(tasksReduce) {
 			finishedReduceSign = true
+			fmt.Printf("所有reduce执行完成，Job执行完毕\n")
 		}
 	}
 
