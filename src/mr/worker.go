@@ -60,8 +60,8 @@ func Worker(mapf func(string, string) []KeyValue,
 		} else if reply.Status == 1 {
 			// 方法一: worker sleep
 			time.Sleep(5 * time.Second)
-		} else {
-			fmt.Printf(fmt.Sprintf("worker:%d 完成的map任务：%v \n", workerID, fmapts))
+		} else if reply.Status == 2 {
+			fmt.Printf(fmt.Sprintf("worker:%d 执行reduce任务:%d \n", workerID, reply.TaskID))
 			break
 		}
 	}

@@ -1,6 +1,9 @@
 package mr
 
-import "log"
+import (
+	"log"
+	"strconv"
+)
 import "net"
 import "os"
 import "net/rpc"
@@ -12,21 +15,24 @@ type Coordinator struct {
 }
 
 type Task struct {
-	id             int
-	isFinishMap    bool
-	isFinishReduce bool
-	fileName       string
-	isAlloc        bool
+	id       int
+	isFinish bool
+	taskName string // 对于map任务为文件名称，对于reduce任务为任务编号
+	isAlloc  bool
+	taskType int // 0 map 1 reduce
 }
 
 var nReduces int
-var tasks []Task
+var tasksMap []Task
+var tasksReduce []Task
 var workers []int
 var workerID int
 var finishedTask int
 var finishedMapSign bool
+var finishedReduceSign bool
 var finishedReduce bool
 var allocMap int
+var allocReduce int
 
 // Your code here -- RPC handlers for the worker to call.
 
@@ -58,7 +64,7 @@ func (c *Coordinator) Done() bool {
 	ret := false
 
 	// Your code here.
-
+	ret = finishedReduceSign
 	return ret
 }
 
@@ -68,14 +74,22 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 	finishedTask = 0
+	finishedReduceSign = false
+	finishedMapSign = false
 	// Your code here.
 	taskN := 0
-	for _, file := range files {
-		temp := Task{id: taskN, isFinishMap: false, isFinishReduce: false, fileName: file, isAlloc: false}
-		tasks = append(tasks, temp)
+	for _, file := range files { //初始化map任务
+		temp := Task{id: taskN, isFinish: false, taskName: file, isAlloc: false, taskType: 0}
+		tasksMap = append(tasksMap, temp)
 		taskN++
 	}
 	nReduces = nReduce
+	taskN = 0
+	for ; taskN < nReduces; taskN++ { // 初始化reduce任务
+		temp := Task{id: taskN, isFinish: false, taskName: strconv.Itoa(taskN), isAlloc: false, taskType: 1}
+		tasksMap = append(tasksMap, temp)
+		taskN++
+	}
 	c.server()
 	return &c
 }
@@ -90,13 +104,13 @@ func (c *Coordinator) InitWorker(args *TaskArgs, reply *WokerInitReply) error {
 func (c *Coordinator) SendTask(args *TaskArgs, reply *TaskReply) error {
 	if !finishedMapSign {
 		//job的map任务尚未完成
-		if allocMap < len(tasks) {
-			for index, task := range tasks {
+		if allocMap < len(tasksMap) {
+			for index, task := range tasksMap {
 				if !task.isAlloc {
-					reply.FileName = task.fileName
+					reply.FileName = task.taskName
 					reply.Status = 0
 					reply.TaskID = task.id
-					tasks[index].isAlloc = true
+					tasksMap[index].isAlloc = true
 					allocMap++
 					break
 				}
@@ -104,10 +118,22 @@ func (c *Coordinator) SendTask(args *TaskArgs, reply *TaskReply) error {
 		} else {
 			reply.Status = 1
 		}
-
 	} else {
-		reply.Status = 2
 		//job的reduce任务尚未完成
+		if allocReduce < len(tasksReduce) {
+			for index, task := range tasksReduce {
+				if !task.isAlloc {
+					reply.FileName = task.taskName
+					reply.Status = 2
+					reply.TaskID = task.id
+					tasksReduce[index].isAlloc = true
+					allocReduce++
+					break
+				}
+			}
+		} else {
+			reply.Status = 3
+		}
 
 	}
 
@@ -116,14 +142,21 @@ func (c *Coordinator) SendTask(args *TaskArgs, reply *TaskReply) error {
 
 func (c *Coordinator) FinishMap(args *FinishArgs, reply *TaskReply) error {
 	if args.FinishID == 0 {
-		tasks[args.TaskID].isFinishMap = true
+		tasksMap[args.TaskID].isFinish = true
 	} else {
-		tasks[args.TaskID].isFinishReduce = true
+		tasksReduce[args.TaskID].isFinish = true
 	}
 	finishedTask++
-	if finishedTask == len(tasks) {
-		finishedMapSign = true
-		finishedTask = 0
+	if !finishedMapSign {
+		if finishedTask == len(tasksMap) {
+			finishedMapSign = true
+			finishedTask = 0
+		}
+	} else {
+		if finishedTask == len(tasksReduce) {
+			finishedReduceSign = true
+		}
 	}
+
 	return nil
 }
